@@ -19,4 +19,5 @@ Testing: xUnit, Moq
 Licensed under Apache License.
 📧 Contact: srimay1998@gmail.com
 
+IMPORTANT NOTE: The appSettings.json user creds have been redacted for security concerns, contact admin to setup Environment Variables for the Same
 🚀 Contributions are most Welcome!
