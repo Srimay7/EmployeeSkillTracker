@@ -9,4 +9,5 @@ public class Employee
     [JsonIgnore]
     public DateTime DateCreated { get; set; }//future scope
     public List<Skill> Skills { get; set; }
+    public string? ErrorMessage { get; set; }
 }

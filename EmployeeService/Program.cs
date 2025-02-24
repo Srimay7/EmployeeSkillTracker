@@ -6,10 +6,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+});
 // Configure dependency injection
+builder.Services.AddMemoryCache();  // ✅ Add this line
 builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
 builder.Services.AddScoped<IEmployeeManager, EmployeeManager>();
+builder.Services.AddScoped<ICloudService, CloudService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 // Enable CORS
 builder.Services.AddCors(options =>
@@ -25,10 +31,10 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Employee API V1"));
 
-app.UseHttpsRedirection(); // ✅ Redirect HTTP to HTTPS
-app.UseRouting();          // ✅ Ensure routing is set
-app.UseCors("AllowAll");   // ✅ Enable CORS if needed
-app.UseAuthorization();    // ✅ Ensure authorization works
+app.UseHttpsRedirection();
+app.UseRouting();
+app.UseCors("AllowAll");
+app.UseAuthorization();
 
 app.MapControllers();
 app.Run();

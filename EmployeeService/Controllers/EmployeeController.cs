@@ -1,78 +1,31 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 [ApiController]
 [Route("api")]
 public class EmployeeController : ControllerBase
 {
     private readonly IEmployeeManager _employeeManager;
+    private readonly ILogger<EmployeeController> _logger;
 
-    public EmployeeController(IEmployeeManager employeeManager)
+    public EmployeeController(IEmployeeManager employeeManager, ILogger<EmployeeController> logger)
     {
         _employeeManager = employeeManager;
+        _logger = logger;
     }
-
-    // // GET: api/GetEmployeeById/{id}
-    // [HttpGet("GetEmployeeById/{id}")]
-    // public async Task<IActionResult> GetEmployeeById(int id)
-    // {
-    //     var employee = await _employeeManager.GetEmployeeByIdAsync(id);
-    //     if (employee == null) return NotFound();
-    //     return Ok(employee);
-    // }
-
-    // // GET: api/GetAllEmployees
-    // [HttpGet("GetAllEmployees")]
-    // public async Task<IActionResult> GetAllEmployees()
-    // {
-    //     var employees = await _employeeManager.GetAllEmployeesAsync();
-    //     return Ok(employees);
-    // }
-
-    // // POST: api/CreateEmployee
-    // [HttpPost("CreateEmployee")]
-    // public async Task<IActionResult> CreateEmployee([FromBody] Employee employee)
-    // {
-    //     await _employeeManager.AddEmployeeAsync(employee);
-    //     return CreatedAtAction(nameof(GetEmployeeById), new { id = employee.Id }, employee);
-    // }
-
-    // // PUT: api/UpdateEmployeeById/{id}
-    // [HttpPut("UpdateEmployeeById/{id}")]
-    // public async Task<IActionResult> UpdateEmployeeById(int id, [FromBody] Employee employee)
-    // {
-    //     if (id != employee.Id) return BadRequest("Employee ID mismatch.");
-    //     await _employeeManager.UpdateEmployeeAsync(employee);
-    //     return NoContent();
-    // }
-
-    // // DELETE: api/DeleteEmployeeById/{id}
-    // [HttpDelete("DeleteEmployeeById/{id}")]
-    // public async Task<IActionResult> DeleteEmployeeById(int id)
-    // {
-    //     await _employeeManager.DeleteEmployeeAsync(id);
-    //     return NoContent();
-    // }
-
-    // // PUT: api/BulkUpdateEmployees
-    // [HttpPut("BulkUpdateEmployees")]
-    // public async Task<IActionResult> BulkUpdateEmployees([FromBody] List<Employee> employees)
-    // {
-    //     await _employeeManager.BulkUpdateEmployeesAsync(employees);
-    //     return NoContent();
-    // }
-
-
-
 
     [HttpPost("AddEmployeeDetails")]
     public async Task<IActionResult> AddEmployeeDetails([FromBody] JsonObject jsonData)
     {
         try
         {
+            _logger.LogInformation("Received AddEmployeeDetails request: {Request}", jsonData.ToJsonString());
+
             if (!jsonData.ContainsKey("employeeId") || !jsonData.ContainsKey("name"))
             {
+                _logger.LogWarning("AddEmployeeDetails failed: Missing EmployeeId or Name.");
                 return BadRequest(new { message = "EmployeeId or Name is required." });
             }
 
@@ -91,6 +44,7 @@ public class EmployeeController : ControllerBase
                     var skill = skillNode.AsObject();
                     if (!skill.ContainsKey("name"))
                     {
+                        _logger.LogWarning("AddEmployeeDetails failed: Skill Name is missing.");
                         return BadRequest(new { message = "Skill Name is required if skills are provided." });
                     }
 
@@ -103,11 +57,88 @@ public class EmployeeController : ControllerBase
             }
 
             var result = await _employeeManager.AddEmployeeDetailsAsync(employee);
-            return result.IsValidationError ? BadRequest(new { message = result.Message }) : Ok(new { message = result.Message });
+            if (result.IsValidationError)
+            {
+                _logger.LogWarning("AddEmployeeDetails validation error: {Message}", result.Message);
+                return BadRequest(new { message = result.Message });
+            }
+
+            _logger.LogInformation("AddEmployeeDetails successful for EmployeeId: {EmployeeId}", employee.EmployeeId);
+            return Ok(new { message = result.Message });
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error in AddEmployeeDetails");
             return StatusCode(500, new { message = $"An error occurred: {ex.Message}" });
+        }
+    }
+
+
+    private const int BatchSize = 100;
+
+    [HttpPost("BulkAddEmployeeDetails")]
+    public async Task<IActionResult> BulkAddEmployeeDetails([FromBody] List<Employee> employees)
+    {
+        _logger.LogInformation("Received BulkAddEmployeeDetails request with {Count} employees", employees?.Count ?? 0);
+
+        if (employees == null || employees.Count == 0)
+        {
+            _logger.LogWarning("BulkAddEmployeeDetails failed: Employee list is empty.");
+            return BadRequest("Employee list cannot be empty.");
+        }
+
+        var (employeesAdded, employeesUpdated, failedRecords) = 
+            await _employeeManager.BulkAddEmployeeDetailsAsync(employees);
+
+        _logger.LogInformation("BulkAddEmployeeDetails completed: {EmployeesAdded} added, {EmployeesUpdated} updated, {FailedRecords} failed", 
+            employeesAdded, employeesUpdated, failedRecords.Count);
+
+        return Ok(new
+        {
+            Message = "Bulk Employee Details Insert Completed",
+            EmployeesAdded = employeesAdded,
+            EmployeesUpdated = employeesUpdated,
+            FailedRecords = failedRecords
+        });
+    }
+
+
+    [HttpPost("GetEmployeesData")]
+    public async Task<IActionResult> GetEmployeesBySkill([FromBody] EmployeeSearchRequest request, [FromHeader] bool ProvideBlobPath = false)
+    {
+        try
+        {
+            _logger.LogInformation("Received GetEmployeesBySkill request: {Request}", JsonSerializer.Serialize(request));
+
+            var result = await _employeeManager.GetEmployeesBySkill(request, ProvideBlobPath);
+
+            _logger.LogInformation("GetEmployeesBySkill completed successfully.");
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in GetEmployeesBySkill");
+            return StatusCode(500, new { Error = "An unexpected error occurred.", Details = ex.Message });
+        }
+    }
+
+    [HttpPost("GenerateSkillGapReport")]
+    public async Task<IActionResult> GenerateSkillGapReport([FromBody] EmployeeSearchRequest request, [FromHeader] string UserEmail = "abc@gmail.com", [FromHeader] bool GenerateReport = false)
+    {
+        try
+        {
+            _logger.LogInformation("Received GenerateSkillGapReport request for Skill: {SkillName} with Report Generation: {GenerateReport}", 
+                request.SkillName, GenerateReport);
+
+            var result = await _employeeManager.GetEmployeesWithoutSkill(request, UserEmail, GenerateReport);
+
+            _logger.LogInformation("GenerateSkillGapReport completed successfully. Report generated: {GenerateReport}", GenerateReport);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in GenerateSkillGapReport");
+            return StatusCode(500, new { Error = "An unexpected error occurred.", Details = ex.Message });
         }
     }
 }
