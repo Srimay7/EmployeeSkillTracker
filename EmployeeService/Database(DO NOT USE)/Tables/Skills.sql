@@ -1,0 +1,5 @@
+CREATE TABLE Skills (
+    SkillId INT IDENTITY(1,1) PRIMARY KEY,
+    Name NVARCHAR(255) NOT NULL,
+    Category NVARCHAR(255) NOT NULL
+);

@@ -1,0 +1,6 @@
+CREATE TYPE TVP_Skills AS TABLE
+(
+    EmployeeId INT NOT NULL,
+    Name NVARCHAR(255) NOT NULL,
+    Category NVARCHAR(255) NOT NULL
+);
